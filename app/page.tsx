@@ -14,18 +14,18 @@ export default function LandingPage() {
   const features = [
     {
       icon: BookOpen,
-      title: 'Questions',
-      description: 'Curated questions designed for deep learning and retention'
+      title: 'Ngân hàng câu hỏi',
+      description: 'Các câu hỏi được biên soạn kỹ lưỡng giúp học sâu và nhớ lâu hơn.'
     },
     {
       icon: Zap,
-      title: 'Instant Feedback',
-      description: 'Get immediate feedback on your answers to reinforce learning'
+      title: 'Phản hồi tức thì',
+      description: 'Nhận kết quả ngay lập tức khi chọn đáp án để củng cố kiến thức kịp thời.'
     },
     {
       icon: MessageCircle,
-      title: 'Explanation & Discussion',
-      description: 'Learn from detailed explanations and community discussions'
+      title: 'Giải thích & Thảo luận',
+      description: 'Học hỏi từ các giải thích chi tiết và các cuộc thảo luận cộng đồng sôi nổi.'
     }
   ];
 
@@ -42,7 +42,7 @@ export default function LandingPage() {
             style={{ transitionDelay: '100ms' }}
           >
             <span className="inline-block rounded-full bg-slate-800/50 px-4 py-1.5 text-xs font-medium tracking-wide text-cyan-400 ring-1 ring-cyan-500/30">
-              AI-powered exam learning
+              Hệ thống ôn thi thông minh
             </span>
           </div>
 
@@ -54,9 +54,9 @@ export default function LandingPage() {
             style={{ transitionDelay: '200ms' }}
           >
             <h1 className="text-5xl sm:text-6xl font-bold tracking-tight text-slate-50 leading-tight">
-              Learn Smarter.
+              Học Thông Minh Hơn.
               <br />
-              Practice Faster.
+              Luyện Tập Nhanh Hơn.
             </h1>
           </div>
 
@@ -68,7 +68,7 @@ export default function LandingPage() {
             style={{ transitionDelay: '300ms' }}
           >
             <p className="text-lg text-slate-400 leading-relaxed">
-              Study certification questions in a focused and modern learning environment. Master concepts through intelligent practice and detailed explanations.
+              Luyện tập các câu hỏi thi chứng chỉ trong môi trường hiện đại và tập trung. Nắm vững mọi kiến thức thông qua các bài thực hành thông minh và lời giải thích chi tiết.
             </p>
           </div>
 
@@ -83,7 +83,7 @@ export default function LandingPage() {
               href="/dashboard"
               className="group relative inline-flex items-center gap-2 rounded-lg bg-cyan-500 px-8 py-3 font-semibold text-slate-900 transition-all hover:bg-cyan-400 active:scale-95"
             >
-              Start Learning (Dashboard)
+              Bắt đầu học (Dashboard)
               <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
             </Link>
             <Link
@@ -102,7 +102,7 @@ export default function LandingPage() {
           {/* Section heading */}
           <div className="text-center">
             <h2 className="text-3xl sm:text-4xl font-bold text-slate-50">
-              Everything you need to succeed
+              Mọi công cụ bạn cần để đạt kết quả cao nhất
             </h2>
           </div>
 
@@ -135,13 +135,13 @@ export default function LandingPage() {
       <div className="border-t border-slate-800 bg-gradient-to-b from-slate-900/50 to-slate-950 px-4 py-16 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="mb-6 text-3xl font-bold text-slate-50">
-            Ready to start learning?
+            Sẵn sàng bắt đầu ôn luyện chưa?
           </h2>
           <Link
             href="/dashboard"
             className="inline-flex items-center gap-2 rounded-lg bg-cyan-500 px-8 py-3 font-semibold text-slate-900 transition-all hover:bg-cyan-400 active:scale-95"
           >
-            Start Learning (Dashboard)
+            Bắt đầu học ngay (Dashboard)
             <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
