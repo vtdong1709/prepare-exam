@@ -1,5 +1,7 @@
 'use client';
 
+import ImageZoom from './ImageZoom';
+
 interface QuestionCardProps {
   question: {
     id: number | string;
@@ -41,7 +43,7 @@ export default function QuestionCard({
         {question.questionImages && question.questionImages.length > 0 && (
           <div className="mt-4 space-y-4">
             {question.questionImages.map((src, index) => (
-              <img
+              <ImageZoom
                 key={index}
                 src={src}
                 alt={`Question graphic ${index + 1}`}

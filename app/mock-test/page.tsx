@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import examDataJson from '@/exam_41_full_data.json';
+import examDataJson from '@/full_330_questions.json';
 import { ExamData, Question } from '@/types/exam';
 import QuestionItem from '@/components/QuestionItem';
 import { 
@@ -24,8 +24,10 @@ const ITEMS_PER_PAGE = 10;
 const TEST_QUESTION_COUNT = 50;
 const TEST_DURATION_MINUTES = 90; // 90 minutes
 
-const examData = examDataJson as unknown as ExamData;
-const allQuestions = examData.pageProps.questions;
+const examData = examDataJson as any;
+const allQuestions: Question[] = Array.isArray(examData)
+  ? examData
+  : (examData.pageProps?.questions || examData.questions || []);
 
 interface TestState {
   questions: Question[];

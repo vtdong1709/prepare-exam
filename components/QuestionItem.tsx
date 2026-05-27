@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Comment, Question } from '../types/exam';
-import { MessageSquare, ChevronDown, ChevronUp, Check, X, ThumbsUp, Calendar, User, Bookmark } from 'lucide-react';
+import { MessageSquare, ChevronDown, ChevronUp, Check, X, ThumbsUp, Calendar, User, Bookmark, Sparkles, Loader2 } from 'lucide-react';
+import ImageZoom from './ImageZoom';
 
 function formatCommentTime(timestamp: string): string {
   if (!timestamp) return '';
@@ -83,6 +84,58 @@ export const QuestionItem: React.FC<QuestionItemProps> = React.memo(({
 }) => {
   const [showExplanation, setShowExplanation] = useState(false);
   const [showComments, setShowComments] = useState(false);
+  const [aiExplanation, setAiExplanation] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const CACHE_KEY = 'ai_explanations';
+  const questionId = question.id || String(question.question_id);
+
+  // Restore cached AI explanation on mount
+  React.useEffect(() => {
+    try {
+      const cache = localStorage.getItem(CACHE_KEY);
+      if (cache) {
+        const parsed = JSON.parse(cache) as Record<string, string>;
+        if (parsed[questionId]) {
+          setAiExplanation(parsed[questionId]);
+        }
+      }
+    } catch { /* ignore corrupt cache */ }
+  }, [questionId]);
+
+  const handleAiExplain = async () => {
+    if (aiExplanation || aiLoading) return;
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const res = await fetch('/api/explain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          questionText: question.question_text,
+          options: question.choices || null,
+          correctAnswer: correctAnswer,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Lỗi không xác định từ server.');
+      }
+      setAiExplanation(data.explanation);
+
+      // Persist to localStorage cache
+      try {
+        const cache = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}');
+        cache[questionId] = data.explanation;
+        localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+      } catch { /* storage full or unavailable */ }
+    } catch (err: any) {
+      setAiError(err.message || 'Không thể kết nối đến AI. Thử lại sau.');
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   const correctAnswer = question.answer || question.answer_ET || '';
   const isMultipleCorrect = correctAnswer.length > 1;
@@ -157,7 +210,7 @@ export const QuestionItem: React.FC<QuestionItemProps> = React.memo(({
         {question.question_images && question.question_images.length > 0 && (
           <div className="mt-4 grid grid-cols-1 gap-3 rounded-xl overflow-hidden bg-slate-950/40 p-2 border border-slate-850">
             {question.question_images.map((src, i) => (
-              <img
+              <ImageZoom
                 key={i}
                 src={src}
                 alt={`Question graphic ${i + 1}`}
@@ -262,6 +315,34 @@ export const QuestionItem: React.FC<QuestionItemProps> = React.memo(({
               {showExplanation ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
             </button>
 
+            {/* AI Explain Button */}
+            <button
+              onClick={handleAiExplain}
+              disabled={aiLoading || !!aiExplanation}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all border group ${
+                aiExplanation
+                  ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30 cursor-default'
+                  : aiLoading
+                    ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30 cursor-wait'
+                    : 'bg-gradient-to-r from-cyan-500/10 to-violet-500/10 text-cyan-300 border-cyan-500/30 hover:border-cyan-400/60 hover:from-cyan-500/20 hover:to-violet-500/20 hover:shadow-lg hover:shadow-cyan-500/5'
+              }`}
+            >
+              {aiLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Sparkles className={`h-3.5 w-3.5 transition-transform ${
+                  !aiExplanation ? 'group-hover:scale-110 group-hover:rotate-12' : ''
+                }`} />
+              )}
+              <span>
+                {aiLoading
+                  ? 'Đang phân tích...'
+                  : aiExplanation
+                    ? '✓ AI đã giải thích'
+                    : 'AI Giải thích (Ngắn gọn)'}
+              </span>
+            </button>
+
             {question.discussion && question.discussion.length > 0 && (
               <button
                 onClick={() => setShowComments(!showComments)}
@@ -277,6 +358,45 @@ export const QuestionItem: React.FC<QuestionItemProps> = React.memo(({
               </button>
             )}
           </div>
+
+          {/* AI Explanation Result */}
+          {(aiExplanation || aiError) && (
+            <div className={`mt-4 relative overflow-hidden rounded-xl border backdrop-blur-sm animate-fade-in ${
+              aiError
+                ? 'border-rose-500/30 bg-rose-950/20'
+                : 'border-cyan-500/30 bg-gradient-to-br from-slate-900/80 via-cyan-950/20 to-slate-900/80'
+            }`}>
+              {/* Decorative glow */}
+              {!aiError && (
+                <div className="absolute -top-10 -right-10 w-32 h-32 bg-cyan-500/10 rounded-full blur-2xl pointer-events-none" />
+              )}
+              <div className="relative p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <Sparkles className={`h-4 w-4 ${
+                    aiError ? 'text-rose-400' : 'text-cyan-400'
+                  }`} />
+                  <h4 className={`text-xs font-bold tracking-wider uppercase ${
+                    aiError ? 'text-rose-400' : 'text-cyan-400'
+                  }`}>
+                    {aiError ? 'Lỗi AI' : 'AI Giải thích'}
+                  </h4>
+                </div>
+                <p className={`text-sm md:text-base leading-relaxed whitespace-pre-wrap ${
+                  aiError ? 'text-rose-300' : 'text-slate-200'
+                }`}>
+                  {aiError || aiExplanation}
+                </p>
+                {aiError && (
+                  <button
+                    onClick={() => { setAiError(null); setAiExplanation(null); handleAiExplain(); }}
+                    className="mt-3 text-xs font-semibold text-rose-300 hover:text-rose-200 underline underline-offset-2 transition-colors"
+                  >
+                    Thử lại
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Explanation Section */}
           {showExplanation && (
@@ -294,7 +414,7 @@ export const QuestionItem: React.FC<QuestionItemProps> = React.memo(({
               {question.answer_images && question.answer_images.length > 0 && (
                 <div className="grid grid-cols-1 gap-3 rounded-lg overflow-hidden bg-slate-950/40 p-2 border border-slate-850">
                   {question.answer_images.map((src, i) => (
-                    <img
+                    <ImageZoom
                       key={i}
                       src={src}
                       alt={`Explanation graphic ${i + 1}`}

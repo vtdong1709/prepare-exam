@@ -1,30 +1,28 @@
-'use client';
+"use client";
 
-import { useState, useMemo, useEffect } from 'react';
-import Link from 'next/link';
-import examDataJson from '@/exam_41_full_data.json';
-import { ExamData, Question } from '@/types/exam';
-import QuestionItem from '@/components/QuestionItem';
-import { 
-  BookOpen, 
-  Search, 
-  Filter, 
-  Layers, 
-  MessageCircle, 
-  ChevronLeft, 
-  ChevronRight, 
-  Info,
+import { useState, useMemo, useEffect } from "react";
+import Link from "next/link";
+import examDataJson from "@/full_330_questions.json";
+import { ExamData, Question } from "@/types/exam";
+import QuestionItem from "@/components/QuestionItem";
+import {
+  BookOpen,
+  Search,
+  Filter,
   RotateCcw,
   Bookmark,
   CheckCircle,
   XCircle,
   HelpCircle,
-  Sparkles
-} from 'lucide-react';
+  Sparkles,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Info,
+} from "lucide-react";
 
 const ITEMS_PER_PAGE = 10;
-const examData = examDataJson as unknown as ExamData;
-const questionsList = examData.pageProps.questions;
 
 interface UserAnswer {
   selected: string[];
@@ -32,92 +30,114 @@ interface UserAnswer {
 }
 
 export default function Dashboard() {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTopic, setSelectedTopic] = useState<string>('All');
-  const [selectedType, setSelectedType] = useState<string>('All'); // All, MC, Non-MC
-  const [studyStatus, setStudyStatus] = useState<string>('All'); // All, Unanswered, Correct, Incorrect, Bookmarked
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedTopic, setSelectedTopic] = useState<string>("All");
+  const [selectedType, setSelectedType] = useState<string>("All");
+  const [studyStatus, setStudyStatus] = useState<string>("All");
   const [currentPage, setCurrentPage] = useState(1);
 
-  // States with localStorage loading
+  // Khởi tạo State lưu trữ toàn bộ danh sách câu hỏi một cách an toàn
+  const [questionsList, setQuestionsList] = useState<Question[]>([]);
   const [bookmarks, setBookmarks] = useState<string[]>([]);
   const [answers, setAnswers] = useState<Record<string, UserAnswer>>({});
   const [isClient, setIsClient] = useState(false);
 
-  // Initialize client side localStorage
+  // Xử lý dữ liệu an toàn ở Client-side để tránh lỗi SSR/Hydration và lấy trọn vẹn 330 câu
   useEffect(() => {
     setIsClient(true);
     try {
-      const storedBookmarks = localStorage.getItem('exam_bookmarks');
-      if (storedBookmarks) {
-        setBookmarks(JSON.parse(storedBookmarks));
-      }
-      
-      const storedAnswers = localStorage.getItem('exam_answers');
-      if (storedAnswers) {
-        setAnswers(JSON.parse(storedAnswers));
-      }
+      // Kiểm tra cấu trúc thực tế của JSON để bóc tách mảng câu hỏi chuẩn xác nhất
+      const data = examDataJson as any;
+      const extractedQuestions =
+        Array.isArray(data) ? data : (data?.pageProps?.questions || data?.questions || []);
+      setQuestionsList(extractedQuestions);
+
+      // Load tiến trình từ localStorage
+      const storedBookmarks = localStorage.getItem("exam_bookmarks");
+      if (storedBookmarks) setBookmarks(JSON.parse(storedBookmarks));
+
+      const storedAnswers = localStorage.getItem("exam_answers");
+      if (storedAnswers) setAnswers(JSON.parse(storedAnswers));
     } catch (e) {
-      console.error('Error loading study progress from localStorage', e);
+      console.error("Lỗi khi đọc file JSON hoặc localStorage:", e);
     }
   }, []);
 
-  // Sync Bookmarks to localStorage
+  // Đóng gói sync Bookmarks
   const handleToggleBookmark = (id: string) => {
-    setBookmarks(prev => {
-      const next = prev.includes(id) ? prev.filter(bId => bId !== id) : [...prev, id];
-      localStorage.setItem('exam_bookmarks', JSON.stringify(next));
+    setBookmarks((prev) => {
+      const next = prev.includes(id)
+        ? prev.filter((bId) => bId !== id)
+        : [...prev, id];
+      localStorage.setItem("exam_bookmarks", JSON.stringify(next));
       return next;
     });
   };
 
-  // Sync Answers to localStorage
-  const handleAnswerSelect = (id: string, selected: string[], isCorrect: boolean) => {
-    setAnswers(prev => {
+  // Đóng gói sync Answers
+  const handleAnswerSelect = (
+    id: string,
+    selected: string[],
+    isCorrect: boolean,
+  ) => {
+    setAnswers((prev) => {
       const next = { ...prev };
       if (selected.length === 0) {
         delete next[id];
       } else {
         next[id] = { selected, isCorrect };
       }
-      localStorage.setItem('exam_answers', JSON.stringify(next));
+      localStorage.setItem("exam_answers", JSON.stringify(next));
       return next;
     });
   };
 
-  // Reset progress confirmation
   const handleResetProgress = () => {
-    if (window.confirm('Bạn có chắc chắn muốn xóa toàn bộ tiến trình học tập (đáp án đã chọn, dấu trang)?')) {
-      localStorage.removeItem('exam_bookmarks');
-      localStorage.removeItem('exam_answers');
+    if (
+      window.confirm(
+        "Bạn có chắc chắn muốn xóa toàn bộ tiến trình học tập (đáp án đã chọn, dấu trang)?",
+      )
+    ) {
+      localStorage.removeItem("exam_bookmarks");
+      localStorage.removeItem("exam_answers");
       setBookmarks([]);
       setAnswers({});
       setCurrentPage(1);
     }
   };
 
-  // Reset filters
+  // Reset trang về 1 mỗi khi thay đổi bộ lọc tìm kiếm
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, selectedTopic, selectedType, studyStatus]);
 
-  // Extract all unique topics
+  // Trích xuất danh sách Topics độc nhất
   const topics = useMemo(() => {
     const list = new Set<string>();
-    questionsList.forEach(q => {
-      if (q.topic) list.add(q.topic);
+    questionsList.forEach((q) => {
+      if (q.topic) list.add(String(q.topic));
     });
-    return ['All', ...Array.from(list).sort()];
-  }, []);
+    return [
+      "All",
+      ...Array.from(list).sort((a, b) =>
+        a.localeCompare(b, undefined, { numeric: true }),
+      ),
+    ];
+  }, [questionsList]);
 
-  // Compute stats
+  // Tính toán Thống kê dữ liệu HUD dựa trên toàn bộ questionsList thực tế
   const stats = useMemo(() => {
     const total = questionsList.length;
     const answeredCount = Object.keys(answers).length;
-    const correctCount = Object.values(answers).filter(a => a.isCorrect).length;
+    const correctCount = Object.values(answers).filter(
+      (a) => a.isCorrect,
+    ).length;
     const incorrectCount = answeredCount - correctCount;
     const bookmarkedCount = bookmarks.length;
-    const progressPercent = total > 0 ? Math.round((answeredCount / total) * 100) : 0;
-    const accuracyRate = answeredCount > 0 ? Math.round((correctCount / answeredCount) * 100) : 0;
+    const progressPercent =
+      total > 0 ? Math.round((answeredCount / total) * 100) : 0;
+    const accuracyRate =
+      answeredCount > 0 ? Math.round((correctCount / answeredCount) * 100) : 0;
 
     return {
       total,
@@ -126,48 +146,54 @@ export default function Dashboard() {
       incorrectCount,
       bookmarkedCount,
       progressPercent,
-      accuracyRate
+      accuracyRate,
     };
-  }, [answers, bookmarks]);
+  }, [questionsList, answers, bookmarks]);
 
-  // Filtered questions based on search, topic, type, and study status
+  // Bộ lọc nâng cao: Tìm kiếm text, ID, Type, và Status làm bài trên toàn chuỗi 330 câu
   const filteredQuestions = useMemo(() => {
-    return questionsList.filter(q => {
-      const qId = q.id || String(q.question_id);
-      
-      const matchesSearch = searchQuery === '' || 
-        q.question_text.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (q.id && q.id.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (q.question_id && String(q.question_id).includes(searchQuery));
-      
-      const matchesTopic = selectedTopic === 'All' || q.topic === selectedTopic;
-      
-      const matchesType = selectedType === 'All' || 
-        (selectedType === 'MC' && q.isMC) ||
-        (selectedType === 'Non-MC' && !q.isMC);
+    return questionsList.filter((q) => {
+      const qId = String(q.id || q.question_id || "");
 
-      // Study Status filters
+      const matchesSearch =
+        searchQuery === "" ||
+        q.question_text?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        qId.toLowerCase().includes(searchQuery.toLowerCase());
+
+      const matchesTopic =
+        selectedTopic === "All" || String(q.topic) === selectedTopic;
+
+      const matchesType =
+        selectedType === "All" ||
+        (selectedType === "MC" && q.isMC) ||
+        (selectedType === "Non-MC" && !q.isMC);
+
       let matchesStatus = true;
       const isAnswered = qId in answers;
       const isCorrect = isAnswered && answers[qId].isCorrect;
 
-      if (studyStatus === 'Unanswered') {
-        matchesStatus = !isAnswered;
-      } else if (studyStatus === 'Correct') {
-        matchesStatus = isCorrect;
-      } else if (studyStatus === 'Incorrect') {
+      if (studyStatus === "Unanswered") matchesStatus = !isAnswered;
+      else if (studyStatus === "Correct") matchesStatus = isCorrect;
+      else if (studyStatus === "Incorrect")
         matchesStatus = isAnswered && !isCorrect;
-      } else if (studyStatus === 'Bookmarked') {
+      else if (studyStatus === "Bookmarked")
         matchesStatus = bookmarks.includes(qId);
-      }
 
       return matchesSearch && matchesTopic && matchesType && matchesStatus;
     });
-  }, [searchQuery, selectedTopic, selectedType, studyStatus, answers, bookmarks]);
+  }, [
+    questionsList,
+    searchQuery,
+    selectedTopic,
+    selectedType,
+    studyStatus,
+    answers,
+    bookmarks,
+  ]);
 
-  // Pagination logic
+  // Xử lý phân trang mượt mà chống giật lag DOM
   const totalPages = Math.ceil(filteredQuestions.length / ITEMS_PER_PAGE) || 1;
-  
+
   const paginatedQuestions = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
     return filteredQuestions.slice(start, start + ITEMS_PER_PAGE);
@@ -175,30 +201,29 @@ export default function Dashboard() {
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
-    window.scrollTo({
-      top: 0,
-      behavior: 'smooth'
-    });
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
   };
 
   const handleResetFilters = () => {
-    setSearchQuery('');
-    setSelectedTopic('All');
-    setSelectedType('All');
-    setStudyStatus('All');
+    setSearchQuery("");
+    setSelectedTopic("All");
+    setSelectedType("All");
+    setStudyStatus("All");
     setCurrentPage(1);
   };
 
+  // Tính toán dãy số phân trang hiển thị (Tối đa 5 nút số)
   const pageNumbers = useMemo(() => {
     const pages = [];
-    const maxPageNumbersToShow = 5;
-    
-    let startPage = Math.max(1, currentPage - Math.floor(maxPageNumbersToShow / 2));
-    let endPage = startPage + maxPageNumbersToShow - 1;
+    const maxPagesToShow = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
+    let endPage = startPage + maxPagesToShow - 1;
 
     if (endPage > totalPages) {
       endPage = totalPages;
-      startPage = Math.max(1, endPage - maxPageNumbersToShow + 1);
+      startPage = Math.max(1, endPage - maxPagesToShow + 1);
     }
 
     for (let i = startPage; i <= endPage; i++) {
@@ -207,14 +232,21 @@ export default function Dashboard() {
     return pages;
   }, [currentPage, totalPages]);
 
+  if (!isClient) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400">
+        Đang đồng bộ dữ liệu bộ đề...
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 selection:bg-cyan-500/30 selection:text-cyan-200">
       <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-cyan-500/10 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute top-1/3 right-1/4 w-[400px] h-[400px] bg-violet-600/10 rounded-full blur-[120px] pointer-events-none" />
 
       <div className="relative max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        
-        {/* Header Dashboard */}
+        {/* Header */}
         <header className="mb-8 text-center sm:text-left flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 pb-6 border-b border-slate-900">
           <div>
             <h1 className="text-4xl font-extrabold tracking-tight bg-gradient-to-r from-slate-100 via-cyan-100 to-cyan-400 bg-clip-text text-transparent flex items-center justify-center sm:justify-start gap-2">
@@ -222,7 +254,8 @@ export default function Dashboard() {
               Bảng Học Tập Thông Minh
             </h1>
             <p className="mt-2 text-slate-400 text-sm md:text-base">
-              Lưu tiến trình học tự động, lọc câu làm sai để củng cố và tối ưu hoá ghi nhớ.
+              Lưu tiến trình học tự động, tối ưu hóa bộ nhớ cho tổng số{" "}
+              <b className="text-cyan-400">{stats.total}</b> câu hỏi.
             </p>
           </div>
           <div className="flex justify-center sm:justify-start gap-3">
@@ -242,81 +275,86 @@ export default function Dashboard() {
           </div>
         </header>
 
-        {/* Study Progress HUD */}
-        {isClient && (
-          <section className="bg-slate-900/30 border border-slate-900 rounded-2xl p-6 mb-8 backdrop-blur-sm">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              
-              {/* Progress bar info */}
-              <div className="space-y-2.5">
-                <div className="flex justify-between items-end text-sm">
-                  <span className="font-semibold text-slate-350 flex items-center gap-1.5">
-                    <BookOpen className="h-4 w-4 text-cyan-400" />
-                    Tiến độ hoàn thành
-                  </span>
-                  <span className="font-mono font-bold text-cyan-400">{stats.answeredCount} / {stats.total} ({stats.progressPercent}%)</span>
-                </div>
-                <div className="w-full bg-slate-950 h-3 rounded-full overflow-hidden border border-slate-900 p-0.5">
-                  <div 
-                    className="bg-gradient-to-r from-cyan-500 to-indigo-500 h-full rounded-full transition-all duration-500"
-                    style={{ width: `${stats.progressPercent}%` }}
-                  />
-                </div>
+        {/* HUD Tiến độ */}
+        <section className="bg-slate-900/30 border border-slate-900 rounded-2xl p-6 mb-8 backdrop-blur-sm">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="space-y-2.5">
+              <div className="flex justify-between items-end text-sm">
+                <span className="font-semibold text-slate-350 flex items-center gap-1.5">
+                  <BookOpen className="h-4 w-4 text-cyan-400" />
+                  Tiến độ hoàn thành
+                </span>
+                <span className="font-mono font-bold text-cyan-400">
+                  {stats.answeredCount} / {stats.total} ({stats.progressPercent}
+                  %)
+                </span>
               </div>
-
-              {/* Accuracy rating */}
-              <div className="space-y-2.5">
-                <div className="flex justify-between items-end text-sm">
-                  <span className="font-semibold text-slate-350 flex items-center gap-1.5">
-                    <CheckCircle className="h-4 w-4 text-emerald-400" />
-                    Tỷ lệ chính xác
-                  </span>
-                  <span className="font-mono font-bold text-emerald-400">{stats.accuracyRate}%</span>
-                </div>
-                <div className="w-full bg-slate-950 h-3 rounded-full overflow-hidden border border-slate-900 p-0.5">
-                  <div 
-                    className="bg-emerald-500 h-full rounded-full transition-all duration-500"
-                    style={{ width: `${stats.accuracyRate}%` }}
-                  />
-                </div>
+              <div className="w-full bg-slate-950 h-3 rounded-full overflow-hidden border border-slate-900 p-0.5">
+                <div
+                  className="bg-gradient-to-r from-cyan-500 to-indigo-500 h-full rounded-full transition-all duration-500"
+                  style={{ width: `${stats.progressPercent}%` }}
+                />
               </div>
-
-              {/* Quick review action pills */}
-              <div className="flex items-center justify-start md:justify-end gap-3 flex-wrap">
-                <button
-                  onClick={() => setStudyStatus('Incorrect')}
-                  className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border transition-all ${
-                    studyStatus === 'Incorrect'
-                      ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
-                      : 'bg-slate-950 text-slate-300 border-slate-850 hover:bg-slate-900 hover:border-slate-700'
-                  }`}
-                >
-                  <XCircle className="h-3.5 w-3.5 text-rose-400" />
-                  Luyện câu sai ({stats.incorrectCount})
-                </button>
-
-                <button
-                  onClick={() => setStudyStatus('Bookmarked')}
-                  className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border transition-all ${
-                    studyStatus === 'Bookmarked'
-                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                      : 'bg-slate-950 text-slate-300 border-slate-850 hover:bg-slate-900 hover:border-slate-700'
-                  }`}
-                >
-                  <Bookmark className="h-3.5 w-3.5 text-amber-400 fill-amber-400/20" />
-                  Đã lưu trữ ({stats.bookmarkedCount})
-                </button>
-              </div>
-
             </div>
-          </section>
-        )}
 
-        {/* Filters and Search Bar */}
+            <div className="space-y-2.5">
+              <div className="flex justify-between items-end text-sm">
+                <span className="font-semibold text-slate-350 flex items-center gap-1.5">
+                  <CheckCircle className="h-4 w-4 text-emerald-400" />
+                  Tỷ lệ chính xác
+                </span>
+                <span className="font-mono font-bold text-emerald-400">
+                  {stats.accuracyRate}%
+                </span>
+              </div>
+              <div className="w-full bg-slate-950 h-3 rounded-full overflow-hidden border border-slate-900 p-0.5">
+                <div
+                  className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                  style={{ width: `${stats.accuracyRate}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-start md:justify-end gap-3 flex-wrap">
+              <button
+                onClick={() =>
+                  setStudyStatus(
+                    studyStatus === "Incorrect" ? "All" : "Incorrect",
+                  )
+                }
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border transition-all ${
+                  studyStatus === "Incorrect"
+                    ? "bg-rose-500/20 text-rose-300 border-rose-500/40"
+                    : "bg-slate-950 text-slate-300 border-slate-850 hover:bg-slate-900 hover:border-slate-700"
+                }`}
+              >
+                <XCircle className="h-3.5 w-3.5 text-rose-400" />
+                Luyện câu sai ({stats.incorrectCount})
+              </button>
+
+              <button
+                onClick={() =>
+                  setStudyStatus(
+                    studyStatus === "Bookmarked" ? "All" : "Bookmarked",
+                  )
+                }
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border transition-all ${
+                  studyStatus === "Bookmarked"
+                    ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                    : "bg-slate-950 text-slate-300 border-slate-850 hover:bg-slate-900 hover:border-slate-700"
+                }`}
+              >
+                <Bookmark className="h-3.5 w-3.5 text-amber-400 fill-amber-400/20" />
+                Đã lưu trữ ({stats.bookmarkedCount})
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* Thanh Bộ Lọc & Tìm kiếm */}
         <section className="bg-slate-900/40 border border-slate-900 rounded-2xl p-5 mb-8 backdrop-blur-sm">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-            {/* Search Input */}
-            <div className="relative md:col-span-1">
+            <div className="relative">
               <Search className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
               <input
                 type="text"
@@ -327,7 +365,6 @@ export default function Dashboard() {
               />
             </div>
 
-            {/* Topic Filter */}
             <div className="relative">
               <Filter className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400 pointer-events-none" />
               <select
@@ -336,13 +373,16 @@ export default function Dashboard() {
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/80 transition-colors appearance-none cursor-pointer"
               >
                 <option value="All">Mọi chủ đề</option>
-                {topics.filter(t => t !== 'All').map((topic) => (
-                  <option key={topic} value={topic}>Chủ đề {topic}</option>
-                ))}
+                {topics
+                  .filter((t) => t !== "All")
+                  .map((topic) => (
+                    <option key={topic} value={topic}>
+                      Chủ đề {topic}
+                    </option>
+                  ))}
               </select>
             </div>
 
-            {/* Study Status Filter */}
             <div className="relative">
               <HelpCircle className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400 pointer-events-none" />
               <select
@@ -358,7 +398,6 @@ export default function Dashboard() {
               </select>
             </div>
 
-            {/* Type Filter */}
             <div className="relative flex gap-2">
               <select
                 value={selectedType}
@@ -370,7 +409,10 @@ export default function Dashboard() {
                 <option value="Non-MC">Kéo thả / Tự luận</option>
               </select>
 
-              {(searchQuery || selectedTopic !== 'All' || selectedType !== 'All' || studyStatus !== 'All') && (
+              {(searchQuery ||
+                selectedTopic !== "All" ||
+                selectedType !== "All" ||
+                studyStatus !== "All") && (
                 <button
                   onClick={handleResetFilters}
                   title="Đặt lại bộ lọc"
@@ -385,19 +427,24 @@ export default function Dashboard() {
           <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
             <div className="flex items-center gap-1.5">
               <Info className="h-3.5 w-3.5 text-cyan-400/80" />
-              <span>Tìm thấy <b>{filteredQuestions.length}</b> câu hỏi khớp với yêu cầu.</span>
+              <span>
+                Tìm thấy <b>{filteredQuestions.length}</b> / {stats.total} câu
+                hỏi khớp bộ lọc.
+              </span>
             </div>
             {filteredQuestions.length > 0 && (
-              <span>Hiển thị trang {currentPage} trên tổng {totalPages} trang.</span>
+              <span>
+                Hiển thị trang {currentPage} / {totalPages}.
+              </span>
             )}
           </div>
         </section>
 
-        {/* Questions list */}
+        {/* Danh sách Câu hỏi (Đã phân trang chống Lag DOM) */}
         <section className="space-y-6">
           {paginatedQuestions.length > 0 ? (
             paginatedQuestions.map((question, i) => {
-              const qId = question.id || String(question.question_id);
+              const qId = String(question.id || question.question_id || "");
               return (
                 <QuestionItem
                   key={qId}
@@ -413,9 +460,11 @@ export default function Dashboard() {
           ) : (
             <div className="text-center py-20 rounded-2xl border border-dashed border-slate-800 bg-slate-900/10">
               <BookOpen className="h-10 w-10 text-slate-600 mx-auto mb-3" />
-              <h3 className="text-lg font-semibold text-slate-350">Không có câu hỏi nào khớp</h3>
+              <h3 className="text-lg font-semibold text-slate-350">
+                Không có câu hỏi nào khớp
+              </h3>
               <p className="text-slate-500 text-sm mt-1 max-w-md mx-auto">
-                Hãy thử đặt lại tất cả bộ lọc để xem các câu hỏi sẵn có.
+                Hãy thử đặt lại tất cả bộ lọc để xem lại các câu hỏi gốc.
               </p>
               <button
                 onClick={handleResetFilters}
@@ -427,19 +476,30 @@ export default function Dashboard() {
           )}
         </section>
 
-        {/* Pagination controls */}
+        {/* Điều hướng trang (Pagination Controls) */}
         {totalPages > 1 && (
-          <nav className="mt-12 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-900 pt-6">
-            <button
-              onClick={() => handlePageChange(currentPage - 1)}
-              disabled={currentPage === 1}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900/40 hover:bg-slate-900 hover:border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-300 transition-colors disabled:opacity-30 disabled:pointer-events-none active:scale-[0.98]"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              <span>Trang trước</span>
-            </button>
+          <nav className="mt-12 flex flex-col md:flex-row items-center justify-between gap-4 border-t border-slate-900 pt-6">
+            <div className="flex w-full md:w-auto items-center gap-2">
+              <button
+                onClick={() => handlePageChange(1)}
+                disabled={currentPage === 1}
+                className="flex-1 md:flex-initial inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900/40 hover:bg-slate-900 hover:border-slate-700 px-3.5 py-2.5 text-xs font-semibold text-slate-300 transition-colors disabled:opacity-30 disabled:pointer-events-none active:scale-[0.98]"
+              >
+                <ChevronsLeft className="h-3.5 w-3.5" />
+                <span>Trang đầu</span>
+              </button>
 
-            <div className="flex items-center gap-1.5 flex-wrap justify-center">
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="flex-1 md:flex-initial inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900/40 hover:bg-slate-900 hover:border-slate-700 px-3.5 py-2.5 text-xs font-semibold text-slate-300 transition-colors disabled:opacity-30 disabled:pointer-events-none active:scale-[0.98]"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+                <span>Trang trước</span>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-1.5 flex-wrap justify-center my-2 md:my-0">
               {pageNumbers[0] > 1 && (
                 <>
                   <button
@@ -448,18 +508,20 @@ export default function Dashboard() {
                   >
                     1
                   </button>
-                  {pageNumbers[0] > 2 && <span className="text-slate-600 px-1">...</span>}
+                  {pageNumbers[0] > 2 && (
+                    <span className="text-slate-600 px-1">...</span>
+                  )}
                 </>
               )}
 
-              {pageNumbers.map(page => (
+              {pageNumbers.map((page) => (
                 <button
                   key={page}
                   onClick={() => handlePageChange(page)}
                   className={`inline-flex items-center justify-center h-9 w-9 rounded-lg text-sm font-bold transition-all ${
                     currentPage === page
-                      ? 'bg-cyan-500 text-slate-950 ring-2 ring-cyan-500/30'
-                      : 'border border-slate-800/60 text-slate-300 hover:bg-slate-900'
+                      ? "bg-cyan-500 text-slate-950 ring-2 ring-cyan-500/30"
+                      : "border border-slate-800/60 text-slate-300 hover:bg-slate-900"
                   }`}
                 >
                   {page}
@@ -468,7 +530,9 @@ export default function Dashboard() {
 
               {pageNumbers[pageNumbers.length - 1] < totalPages && (
                 <>
-                  {pageNumbers[pageNumbers.length - 1] < totalPages - 1 && <span className="text-slate-600 px-1">...</span>}
+                  {pageNumbers[pageNumbers.length - 1] < totalPages - 1 && (
+                    <span className="text-slate-600 px-1">...</span>
+                  )}
                   <button
                     onClick={() => handlePageChange(totalPages)}
                     className="inline-flex items-center justify-center h-9 w-9 rounded-lg text-sm font-medium transition-colors border border-slate-800/40 text-slate-400 hover:bg-slate-900"
@@ -479,17 +543,27 @@ export default function Dashboard() {
               )}
             </div>
 
-            <button
-              onClick={() => handlePageChange(currentPage + 1)}
-              disabled={currentPage === totalPages}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900/40 hover:bg-slate-900 hover:border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-300 transition-colors disabled:opacity-30 disabled:pointer-events-none active:scale-[0.98]"
-            >
-              <span>Trang sau</span>
-              <ChevronRight className="h-4 w-4" />
-            </button>
+            <div className="flex w-full md:w-auto items-center gap-2">
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="flex-1 md:flex-initial inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900/40 hover:bg-slate-900 hover:border-slate-700 px-3.5 py-2.5 text-xs font-semibold text-slate-300 transition-colors disabled:opacity-30 disabled:pointer-events-none active:scale-[0.98]"
+              >
+                <span>Trang sau</span>
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+
+              <button
+                onClick={() => handlePageChange(totalPages)}
+                disabled={currentPage === totalPages}
+                className="flex-1 md:flex-initial inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900/40 hover:bg-slate-900 hover:border-slate-700 px-3.5 py-2.5 text-xs font-semibold text-slate-300 transition-colors disabled:opacity-30 disabled:pointer-events-none active:scale-[0.98]"
+              >
+                <span>Trang cuối</span>
+                <ChevronsRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </nav>
         )}
-
       </div>
     </div>
   );
