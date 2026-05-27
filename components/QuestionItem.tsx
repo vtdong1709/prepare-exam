@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Comment, Question } from '../types/exam';
-import { MessageSquare, ChevronDown, ChevronUp, Check, X, ThumbsUp, Calendar, User, Bookmark, Sparkles, Loader2 } from 'lucide-react';
+import { MessageSquare, ChevronDown, ChevronUp, Check, X, ThumbsUp, Calendar, User, Bookmark, Sparkles, Loader2, Copy } from 'lucide-react';
 import ImageZoom from './ImageZoom';
 
 function formatCommentTime(timestamp: string): string {
@@ -87,6 +87,27 @@ export const QuestionItem: React.FC<QuestionItemProps> = React.memo(({
   const [aiExplanation, setAiExplanation] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyQuestion = async () => {
+    const choicesText = question.choices && Object.keys(question.choices).length > 0
+      ? Object.entries(question.choices)
+          .map(([key, val]) => `${key}. ${val}`)
+          .join('\n')
+      : '';
+
+    const copyText = `Question ${question.question_id}
+${question.question_text}
+${choicesText ? choicesText + '\n' : ''}Đáp án đúng: ${question.answer_ET || question.answer || ''}`;
+
+    try {
+      await navigator.clipboard.writeText(copyText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Không thể copy câu hỏi:', err);
+    }
+  };
 
   const CACHE_KEY = 'ai_explanations';
   const questionId = question.id || String(question.question_id);
@@ -186,18 +207,42 @@ export const QuestionItem: React.FC<QuestionItemProps> = React.memo(({
           )}
         </div>
         
-        <button
-          onClick={() => onToggleBookmark(question.id || String(question.question_id))}
-          className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-            isBookmarked
-              ? 'bg-amber-500/10 text-amber-300 border-amber-500/30 hover:bg-amber-500/20'
-              : 'bg-slate-900/40 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-350'
-          }`}
-          title={isBookmarked ? 'Bỏ đánh dấu câu hỏi này' : 'Đánh dấu để xem lại sau'}
-        >
-          <Bookmark className={`h-3.5 w-3.5 ${isBookmarked ? 'fill-amber-400 text-amber-400' : ''}`} />
-          <span className="hidden xs:inline">{isBookmarked ? 'Đã lưu' : 'Lưu lại'}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleCopyQuestion}
+            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+              copied
+                ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+                : 'bg-slate-900/40 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-350'
+            }`}
+            title="Sao chép câu hỏi & đáp án đúng"
+          >
+            {copied ? (
+              <>
+                <Check className="h-3.5 w-3.5 text-emerald-400" />
+                <span>Copied!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="h-3.5 w-3.5" />
+                <span>Copy</span>
+              </>
+            )}
+          </button>
+
+          <button
+            onClick={() => onToggleBookmark(question.id || String(question.question_id))}
+            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+              isBookmarked
+                ? 'bg-amber-500/10 text-amber-300 border-amber-500/30 hover:bg-amber-500/20'
+                : 'bg-slate-900/40 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-350'
+            }`}
+            title={isBookmarked ? 'Bỏ đánh dấu câu hỏi này' : 'Đánh dấu để xem lại sau'}
+          >
+            <Bookmark className={`h-3.5 w-3.5 ${isBookmarked ? 'fill-amber-400 text-amber-400' : ''}`} />
+            <span className="hidden xs:inline">{isBookmarked ? 'Đã lưu' : 'Lưu lại'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Question Text */}

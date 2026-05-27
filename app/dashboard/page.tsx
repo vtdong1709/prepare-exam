@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import Link from "next/link";
 import examDataJson from "@/full_330_questions.json";
 import { ExamData, Question } from "@/types/exam";
@@ -15,14 +15,8 @@ import {
   XCircle,
   HelpCircle,
   Sparkles,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
   Info,
 } from "lucide-react";
-
-const ITEMS_PER_PAGE = 10;
 
 interface UserAnswer {
   selected: string[];
@@ -34,7 +28,7 @@ export default function Dashboard() {
   const [selectedTopic, setSelectedTopic] = useState<string>("All");
   const [selectedType, setSelectedType] = useState<string>("All");
   const [studyStatus, setStudyStatus] = useState<string>("All");
-  const [currentPage, setCurrentPage] = useState(1);
+  const [visibleCount, setVisibleCount] = useState(10);
 
   // Khởi tạo State lưu trữ toàn bộ danh sách câu hỏi một cách an toàn
   const [questionsList, setQuestionsList] = useState<Question[]>([]);
@@ -102,13 +96,13 @@ export default function Dashboard() {
       localStorage.removeItem("exam_answers");
       setBookmarks([]);
       setAnswers({});
-      setCurrentPage(1);
+      setVisibleCount(10);
     }
   };
 
-  // Reset trang về 1 mỗi khi thay đổi bộ lọc tìm kiếm
+  // Reset số lượng câu hỏi hiển thị về 10 mỗi khi thay đổi các bộ lọc
   useEffect(() => {
-    setCurrentPage(1);
+    setVisibleCount(10);
   }, [searchQuery, selectedTopic, selectedType, studyStatus]);
 
   // Trích xuất danh sách Topics độc nhất
@@ -191,46 +185,47 @@ export default function Dashboard() {
     bookmarks,
   ]);
 
-  // Xử lý phân trang mượt mà chống giật lag DOM
-  const totalPages = Math.ceil(filteredQuestions.length / ITEMS_PER_PAGE) || 1;
-
-  const paginatedQuestions = useMemo(() => {
-    const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredQuestions.slice(start, start + ITEMS_PER_PAGE);
-  }, [filteredQuestions, currentPage]);
-
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-    if (typeof window !== "undefined") {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
-  };
+  // Dành cho Infinite Scroll
+  const visibleQuestions = useMemo(() => {
+    return filteredQuestions.slice(0, visibleCount);
+  }, [filteredQuestions, visibleCount]);
 
   const handleResetFilters = () => {
     setSearchQuery("");
     setSelectedTopic("All");
     setSelectedType("All");
     setStudyStatus("All");
-    setCurrentPage(1);
+    setVisibleCount(10);
   };
 
-  // Tính toán dãy số phân trang hiển thị (Tối đa 5 nút số)
-  const pageNumbers = useMemo(() => {
-    const pages = [];
-    const maxPagesToShow = 5;
-    let startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
-    let endPage = startPage + maxPagesToShow - 1;
+  const observerRef = useRef<HTMLDivElement | null>(null);
 
-    if (endPage > totalPages) {
-      endPage = totalPages;
-      startPage = Math.max(1, endPage - maxPagesToShow + 1);
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount((prev) => {
+            if (prev < filteredQuestions.length) {
+              return prev + 10;
+            }
+            return prev;
+          });
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    const currentAnchor = observerRef.current;
+    if (currentAnchor) {
+      observer.observe(currentAnchor);
     }
 
-    for (let i = startPage; i <= endPage; i++) {
-      pages.push(i);
-    }
-    return pages;
-  }, [currentPage, totalPages]);
+    return () => {
+      if (currentAnchor) {
+        observer.unobserve(currentAnchor);
+      }
+    };
+  }, [filteredQuestions.length]);
 
   if (!isClient) {
     return (
@@ -434,22 +429,22 @@ export default function Dashboard() {
             </div>
             {filteredQuestions.length > 0 && (
               <span>
-                Hiển thị trang {currentPage} / {totalPages}.
+                Đang hiển thị <b>{Math.min(visibleCount, filteredQuestions.length)}</b> câu.
               </span>
             )}
           </div>
         </section>
 
-        {/* Danh sách Câu hỏi (Đã phân trang chống Lag DOM) */}
+        {/* Danh sách Câu hỏi (Dạng Infinite Scroll) */}
         <section className="space-y-6">
-          {paginatedQuestions.length > 0 ? (
-            paginatedQuestions.map((question, i) => {
+          {visibleQuestions.length > 0 ? (
+            visibleQuestions.map((question, i) => {
               const qId = String(question.id || question.question_id || "");
               return (
                 <QuestionItem
                   key={qId}
                   question={question}
-                  index={(currentPage - 1) * ITEMS_PER_PAGE + i + 1}
+                  index={i + 1}
                   isBookmarked={bookmarks.includes(qId)}
                   onToggleBookmark={handleToggleBookmark}
                   savedAnswers={answers[qId]?.selected || []}
@@ -476,94 +471,12 @@ export default function Dashboard() {
           )}
         </section>
 
-        {/* Điều hướng trang (Pagination Controls) */}
-        {totalPages > 1 && (
-          <nav className="mt-12 flex flex-col md:flex-row items-center justify-between gap-4 border-t border-slate-900 pt-6">
-            <div className="flex w-full md:w-auto items-center gap-2">
-              <button
-                onClick={() => handlePageChange(1)}
-                disabled={currentPage === 1}
-                className="flex-1 md:flex-initial inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900/40 hover:bg-slate-900 hover:border-slate-700 px-3.5 py-2.5 text-xs font-semibold text-slate-300 transition-colors disabled:opacity-30 disabled:pointer-events-none active:scale-[0.98]"
-              >
-                <ChevronsLeft className="h-3.5 w-3.5" />
-                <span>Trang đầu</span>
-              </button>
-
-              <button
-                onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage === 1}
-                className="flex-1 md:flex-initial inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900/40 hover:bg-slate-900 hover:border-slate-700 px-3.5 py-2.5 text-xs font-semibold text-slate-300 transition-colors disabled:opacity-30 disabled:pointer-events-none active:scale-[0.98]"
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
-                <span>Trang trước</span>
-              </button>
-            </div>
-
-            <div className="flex items-center gap-1.5 flex-wrap justify-center my-2 md:my-0">
-              {pageNumbers[0] > 1 && (
-                <>
-                  <button
-                    onClick={() => handlePageChange(1)}
-                    className="inline-flex items-center justify-center h-9 w-9 rounded-lg text-sm font-medium transition-colors border border-slate-800/40 text-slate-400 hover:bg-slate-900"
-                  >
-                    1
-                  </button>
-                  {pageNumbers[0] > 2 && (
-                    <span className="text-slate-600 px-1">...</span>
-                  )}
-                </>
-              )}
-
-              {pageNumbers.map((page) => (
-                <button
-                  key={page}
-                  onClick={() => handlePageChange(page)}
-                  className={`inline-flex items-center justify-center h-9 w-9 rounded-lg text-sm font-bold transition-all ${
-                    currentPage === page
-                      ? "bg-cyan-500 text-slate-950 ring-2 ring-cyan-500/30"
-                      : "border border-slate-800/60 text-slate-300 hover:bg-slate-900"
-                  }`}
-                >
-                  {page}
-                </button>
-              ))}
-
-              {pageNumbers[pageNumbers.length - 1] < totalPages && (
-                <>
-                  {pageNumbers[pageNumbers.length - 1] < totalPages - 1 && (
-                    <span className="text-slate-600 px-1">...</span>
-                  )}
-                  <button
-                    onClick={() => handlePageChange(totalPages)}
-                    className="inline-flex items-center justify-center h-9 w-9 rounded-lg text-sm font-medium transition-colors border border-slate-800/40 text-slate-400 hover:bg-slate-900"
-                  >
-                    {totalPages}
-                  </button>
-                </>
-              )}
-            </div>
-
-            <div className="flex w-full md:w-auto items-center gap-2">
-              <button
-                onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage === totalPages}
-                className="flex-1 md:flex-initial inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900/40 hover:bg-slate-900 hover:border-slate-700 px-3.5 py-2.5 text-xs font-semibold text-slate-300 transition-colors disabled:opacity-30 disabled:pointer-events-none active:scale-[0.98]"
-              >
-                <span>Trang sau</span>
-                <ChevronRight className="h-3.5 w-3.5" />
-              </button>
-
-              <button
-                onClick={() => handlePageChange(totalPages)}
-                disabled={currentPage === totalPages}
-                className="flex-1 md:flex-initial inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900/40 hover:bg-slate-900 hover:border-slate-700 px-3.5 py-2.5 text-xs font-semibold text-slate-300 transition-colors disabled:opacity-30 disabled:pointer-events-none active:scale-[0.98]"
-              >
-                <span>Trang cuối</span>
-                <ChevronsRight className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </nav>
-        )}
+        {/* Điểm neo để phát hiện cuộn cuối trang (Infinite Scroll Anchor) */}
+        <div ref={observerRef} className="h-10 flex items-center justify-center text-slate-500 text-xs font-semibold py-8">
+          {visibleCount < filteredQuestions.length && (
+            <span className="animate-pulse">Đang tải thêm câu hỏi...</span>
+          )}
+        </div>
       </div>
     </div>
   );
