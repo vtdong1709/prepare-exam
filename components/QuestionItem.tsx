@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Comment, Question } from '../types/exam';
-import { MessageSquare, ChevronDown, ChevronUp, Check, X, ThumbsUp, Calendar, User, Bookmark, Sparkles, Loader2, Copy } from 'lucide-react';
+import { MessageSquare, ChevronDown, ChevronUp, Check, X, ThumbsUp, Calendar, User, Bookmark, Copy } from 'lucide-react';
 import ImageZoom from './ImageZoom';
 
 function formatCommentTime(timestamp: string): string {
@@ -84,14 +84,12 @@ export const QuestionItem: React.FC<QuestionItemProps> = React.memo(({
 }) => {
   const [showExplanation, setShowExplanation] = useState(false);
   const [showComments, setShowComments] = useState(false);
-  const [aiExplanation, setAiExplanation] = useState<string | null>(null);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   const handleCopyQuestion = async () => {
     const choicesText = question.choices && Object.keys(question.choices).length > 0
       ? Object.entries(question.choices)
+          .sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
           .map(([key, val]) => `${key}. ${val}`)
           .join('\n')
       : '';
@@ -109,57 +107,20 @@ ${choicesText ? choicesText + '\n' : ''}Đáp án đúng: ${question.answer_ET |
     }
   };
 
-  const CACHE_KEY = 'ai_explanations';
-  const questionId = question.id || String(question.question_id);
-
-  // Restore cached AI explanation on mount
-  React.useEffect(() => {
-    try {
-      const cache = localStorage.getItem(CACHE_KEY);
-      if (cache) {
-        const parsed = JSON.parse(cache) as Record<string, string>;
-        if (parsed[questionId]) {
-          setAiExplanation(parsed[questionId]);
-        }
-      }
-    } catch { /* ignore corrupt cache */ }
-  }, [questionId]);
-
-  const handleAiExplain = async () => {
-    if (aiExplanation || aiLoading) return;
-    setAiLoading(true);
-    setAiError(null);
-    try {
-      const res = await fetch('/api/explain', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          questionText: question.question_text,
-          options: question.choices || null,
-          correctAnswer: correctAnswer,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Lỗi không xác định từ server.');
-      }
-      setAiExplanation(data.explanation);
-
-      // Persist to localStorage cache
-      try {
-        const cache = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}');
-        cache[questionId] = data.explanation;
-        localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
-      } catch { /* storage full or unavailable */ }
-    } catch (err: any) {
-      setAiError(err.message || 'Không thể kết nối đến AI. Thử lại sau.');
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
   const correctAnswer = question.answer || question.answer_ET || '';
   const isMultipleCorrect = correctAnswer.length > 1;
+  const correctKeys = React.useMemo(() => correctAnswer.split(''), [correctAnswer]);
+
+  const showFeedbackNow = React.useMemo(() => {
+    if (hideFeedback) return false;
+    if (savedAnswers.length === 0) return false;
+    if (!isMultipleCorrect) return true;
+    
+    const hasChosenWrong = savedAnswers.some(k => !correctKeys.includes(k));
+    const hasChosenAllCorrect = correctKeys.every(k => savedAnswers.includes(k));
+    
+    return hasChosenWrong || hasChosenAllCorrect;
+  }, [hideFeedback, savedAnswers, isMultipleCorrect, correctKeys]);
 
   const handleChoiceClick = (choiceKey: string) => {
     let newSelections: string[] = [];
@@ -175,7 +136,6 @@ ${choicesText ? choicesText + '\n' : ''}Đáp án đúng: ${question.answer_ET |
 
     let isCorrect = false;
     if (isMultipleCorrect) {
-      const correctKeys = correctAnswer.split('');
       const hasAllCorrect = correctKeys.every(k => newSelections.includes(k));
       const hasNoIncorrect = newSelections.every(k => correctKeys.includes(k));
       isCorrect = hasAllCorrect && hasNoIncorrect;
@@ -269,20 +229,16 @@ ${choicesText ? choicesText + '\n' : ''}Đáp án đúng: ${question.answer_ET |
       {/* Choices / Answers */}
       {hasChoices ? (
         <div className="space-y-3 mb-6">
-          {Object.entries(question.choices!).map(([key, value]) => {
-            const isSelected = savedAnswers.includes(key);
-            const isThisCorrect = correctAnswer.includes(key);
-            
-            let btnClass = "border-slate-800 bg-slate-900/30 text-slate-300 hover:border-slate-700 hover:bg-slate-800/40";
-            let iconElement = null;
+          {Object.entries(question.choices!)
+            .sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
+            .map(([key, value]) => {
+              const isSelected = savedAnswers.includes(key);
+              const isThisCorrect = correctAnswer.includes(key);
+              
+              let btnClass = "border-slate-800 bg-slate-900/30 text-slate-300 hover:border-slate-700 hover:bg-slate-800/40";
+              let iconElement = null;
 
-            if (savedAnswers.length > 0) {
-              if (hideFeedback) {
-                // If feedback is hidden, only show standard selected styling (light blue/cyan)
-                if (isSelected) {
-                  btnClass = "border-cyan-500 bg-cyan-500/10 text-cyan-300 ring-2 ring-cyan-500/20";
-                }
-              } else {
+              if (showFeedbackNow) {
                 if (isThisCorrect) {
                   btnClass = "border-emerald-500/50 bg-emerald-500/10 text-emerald-300";
                   iconElement = <Check className="h-5 w-5 text-emerald-400 shrink-0" />;
@@ -290,33 +246,88 @@ ${choicesText ? choicesText + '\n' : ''}Đáp án đúng: ${question.answer_ET |
                   btnClass = "border-rose-500/50 bg-rose-500/10 text-rose-300";
                   iconElement = <X className="h-5 w-5 text-rose-400 shrink-0" />;
                 }
+              } else if (isSelected) {
+                btnClass = "border-cyan-500 bg-cyan-500/10 text-cyan-300 ring-2 ring-cyan-500/20";
               }
-            }
 
-            return (
-              <button
-                key={key}
-                onClick={() => handleChoiceClick(key)}
-                className={`w-full flex items-center justify-between gap-4 text-left px-5 py-4 rounded-xl border font-medium transition-all duration-200 active:scale-[0.99] group ${btnClass}`}
-              >
-                <div className="flex items-start gap-3">
-                  <span className={`flex items-center justify-center h-6 w-6 rounded-md text-xs font-bold shrink-0 transition-colors ${
-                    savedAnswers.length > 0 && !hideFeedback && isThisCorrect 
-                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" 
-                      : savedAnswers.length > 0 && !hideFeedback && isSelected && !isThisCorrect 
-                        ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
-                        : isSelected && hideFeedback
-                          ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"
-                          : "bg-slate-800 text-slate-300 border border-slate-750 group-hover:bg-slate-700"
-                  }`}>
-                    {key}
-                  </span>
-                  <span className="text-sm md:text-base leading-snug">{value}</span>
-                </div>
-                {iconElement}
-              </button>
-            );
-          })}
+              // Visual Checkbox/Radio styling
+              let indicatorClass = "";
+              let indicatorIcon = null;
+
+              if (isMultipleCorrect) {
+                // Checkbox style (square-ish)
+                if (showFeedbackNow) {
+                  if (isThisCorrect) {
+                    indicatorClass = "border-emerald-500 bg-emerald-500 text-slate-950";
+                    indicatorIcon = <Check className="h-3 w-3 stroke-[3.5]" />;
+                  } else if (isSelected && !isThisCorrect) {
+                    indicatorClass = "border-rose-500 bg-rose-500 text-slate-950";
+                    indicatorIcon = <X className="h-3 w-3 stroke-[3.5]" />;
+                  } else {
+                    indicatorClass = "border-slate-700 bg-slate-800/40 text-slate-500";
+                  }
+                } else {
+                  if (isSelected) {
+                    indicatorClass = "border-cyan-500 bg-cyan-500 text-slate-950";
+                    indicatorIcon = <Check className="h-3 w-3 stroke-[3.5]" />;
+                  } else {
+                    indicatorClass = "border-slate-750 bg-slate-850 group-hover:border-slate-600";
+                  }
+                }
+              } else {
+                // Radio style (circle)
+                if (showFeedbackNow) {
+                  if (isThisCorrect) {
+                    indicatorClass = "border-emerald-500 bg-emerald-500 text-slate-950";
+                    indicatorIcon = <Check className="h-3 w-3 stroke-[3.5]" />;
+                  } else if (isSelected && !isThisCorrect) {
+                    indicatorClass = "border-rose-500 bg-rose-500 text-slate-950";
+                    indicatorIcon = <X className="h-3 w-3 stroke-[3.5]" />;
+                  } else {
+                    indicatorClass = "border-slate-700 bg-slate-800/40 text-slate-500";
+                  }
+                } else {
+                  if (isSelected) {
+                    indicatorClass = "border-cyan-500 bg-cyan-500 text-slate-950";
+                    indicatorIcon = <div className="h-1.5 w-1.5 rounded-full bg-slate-950" />;
+                  } else {
+                    indicatorClass = "border-slate-750 bg-slate-850 group-hover:border-slate-600";
+                  }
+                }
+              }
+
+              return (
+                <button
+                  key={key}
+                  onClick={() => handleChoiceClick(key)}
+                  className={`w-full flex items-center justify-between gap-4 text-left px-5 py-4 rounded-xl border font-medium transition-all duration-200 active:scale-[0.99] group ${btnClass}`}
+                >
+                  <div className="flex items-start gap-3 w-full">
+                    {/* Checkbox / Radio Indicator */}
+                    <div className={`flex items-center justify-center h-5 w-5 shrink-0 transition-all mt-0.5 border ${
+                      isMultipleCorrect ? 'rounded' : 'rounded-full'
+                    } ${indicatorClass}`}>
+                      {indicatorIcon}
+                    </div>
+
+                    {/* Letter badge */}
+                    <span className={`flex items-center justify-center h-6 w-6 rounded-md text-xs font-bold shrink-0 transition-colors ${
+                      showFeedbackNow && isThisCorrect 
+                        ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" 
+                        : showFeedbackNow && isSelected && !isThisCorrect 
+                          ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                          : isSelected
+                            ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"
+                            : "bg-slate-800 text-slate-300 border border-slate-750 group-hover:bg-slate-700"
+                    }`}>
+                      {key}
+                    </span>
+                    <span className="text-sm md:text-base leading-snug">{value}</span>
+                  </div>
+                  {iconElement}
+                </button>
+              );
+            })}
         </div>
       ) : (
         // Non-MC question support
@@ -360,34 +371,6 @@ ${choicesText ? choicesText + '\n' : ''}Đáp án đúng: ${question.answer_ET |
               {showExplanation ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
             </button>
 
-            {/* AI Explain Button */}
-            <button
-              onClick={handleAiExplain}
-              disabled={aiLoading || !!aiExplanation}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all border group ${
-                aiExplanation
-                  ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30 cursor-default'
-                  : aiLoading
-                    ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30 cursor-wait'
-                    : 'bg-gradient-to-r from-cyan-500/10 to-violet-500/10 text-cyan-300 border-cyan-500/30 hover:border-cyan-400/60 hover:from-cyan-500/20 hover:to-violet-500/20 hover:shadow-lg hover:shadow-cyan-500/5'
-              }`}
-            >
-              {aiLoading ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Sparkles className={`h-3.5 w-3.5 transition-transform ${
-                  !aiExplanation ? 'group-hover:scale-110 group-hover:rotate-12' : ''
-                }`} />
-              )}
-              <span>
-                {aiLoading
-                  ? 'Đang phân tích...'
-                  : aiExplanation
-                    ? '✓ AI đã giải thích'
-                    : 'AI Giải thích (Ngắn gọn)'}
-              </span>
-            </button>
-
             {question.discussion && question.discussion.length > 0 && (
               <button
                 onClick={() => setShowComments(!showComments)}
@@ -403,45 +386,6 @@ ${choicesText ? choicesText + '\n' : ''}Đáp án đúng: ${question.answer_ET |
               </button>
             )}
           </div>
-
-          {/* AI Explanation Result */}
-          {(aiExplanation || aiError) && (
-            <div className={`mt-4 relative overflow-hidden rounded-xl border backdrop-blur-sm animate-fade-in ${
-              aiError
-                ? 'border-rose-500/30 bg-rose-950/20'
-                : 'border-cyan-500/30 bg-gradient-to-br from-slate-900/80 via-cyan-950/20 to-slate-900/80'
-            }`}>
-              {/* Decorative glow */}
-              {!aiError && (
-                <div className="absolute -top-10 -right-10 w-32 h-32 bg-cyan-500/10 rounded-full blur-2xl pointer-events-none" />
-              )}
-              <div className="relative p-5">
-                <div className="flex items-center gap-2 mb-3">
-                  <Sparkles className={`h-4 w-4 ${
-                    aiError ? 'text-rose-400' : 'text-cyan-400'
-                  }`} />
-                  <h4 className={`text-xs font-bold tracking-wider uppercase ${
-                    aiError ? 'text-rose-400' : 'text-cyan-400'
-                  }`}>
-                    {aiError ? 'Lỗi AI' : 'AI Giải thích'}
-                  </h4>
-                </div>
-                <p className={`text-sm md:text-base leading-relaxed whitespace-pre-wrap ${
-                  aiError ? 'text-rose-300' : 'text-slate-200'
-                }`}>
-                  {aiError || aiExplanation}
-                </p>
-                {aiError && (
-                  <button
-                    onClick={() => { setAiError(null); setAiExplanation(null); handleAiExplain(); }}
-                    className="mt-3 text-xs font-semibold text-rose-300 hover:text-rose-200 underline underline-offset-2 transition-colors"
-                  >
-                    Thử lại
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
 
           {/* Explanation Section */}
           {showExplanation && (
